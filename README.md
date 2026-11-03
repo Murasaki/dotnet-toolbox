@@ -42,3 +42,26 @@ extension method (e.g. `services.AddMyApp()`) that both `Program.cs` and the Tes
 command handling should take the args and output/error `TextWriter`s rather than using `Console` directly.
 
 Dependencies: Microsoft.AspNetCore.Mvc.Testing, Microsoft.Extensions.Hosting.
+
+## Toolbox.Concurrency
+
+`AsyncPipeline<TIn, TOut>`: an immutable chain of async stages run over a set of items with a
+concurrency limit. Each stage can change the item type; stages are composed, so there are no casts.
+
+```csharp
+var pipeline = AsyncPipeline.Create<Uri>()
+    .AddStage((uri, ct) => http.GetStringAsync(uri, ct))
+    .AddStage(html => Task.FromResult(html.Length))
+    .WithMaxConcurrency(4);
+
+await foreach (var length in pipeline.ProcessAsync(uris, ct))
+{
+    Console.WriteLine(length);
+}
+```
+
+- Results are yielded in **completion order**, not input order.
+- **Fail-fast:** the first stage exception cancels the remaining work and is rethrown from the
+  `await foreach`. Results finished before the failure may be yielded first.
+- Breaking out of the `await foreach` cancels the work still running; a slow consumer applies
+  backpressure through a bounded channel.
